@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Гараж: учёт транспорта</title>
+  <!-- Библиотека для извлечения доминирующего цвета прямо в браузере -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/color-thief/2.4.0/color-thief.umd.min.js"></script>
+  <style>
+    :root { --bg: #f8fafc; --card: #ffffff; --accent: #2563eb; --text: #0f172a; --muted: #64748b; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); max-width: 640px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+    h2, h3 { margin-bottom: 0.5rem; }
+    .form-group { background: var(--card); padding: 1rem; border-radius: 10px; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    label { display: block; font-weight: 500; margin-bottom: 0.4rem; }
+    input[type="text"], input[type="file"] { width: 100%; padding: 0.6rem; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
+    #preview { max-width: 100%; margin: 0.5rem 0; border-radius: 8px; display: none; border: 1px solid #e2e8f0; }
+    .color-row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+    #colorSwatch { width: 36px; height: 36px; border-radius: 6px; border: 1px solid #cbd5e1; background: #eee; flex-shrink: 0; }
+    .btn { padding: 0.6rem 1rem; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; }
+    .btn:disabled { background: #94a3b8; cursor: not-allowed; }
+    .btn-outline { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+    .hint { font-size: 0.85rem; color: var(--muted); margin-top: 0.3rem; }
+    .vinyl-field { display: none; margin-top: 0.6rem; }
+    .car-card { background: var(--card); padding: 0.8rem; border-radius: 8px; margin-bottom: 0.6rem; border: 1px solid #e2e8f0; }
+    .car-card img { max-width: 120px; border-radius: 4px; margin-top: 0.4rem; }
+    .del { color: #ef4444; background: none; border: none; cursor: pointer; font-size: 0.85rem; margin-top: 0.3rem; }
+  </style>
+</head>
+<body>
+
+  <h2>🚗 Добавить транспорт</h2>
+  <form id="carForm">
+    <div class="form-group">
+      <label>Фото кузова</label>
+      <input type="file" id="carPhoto" accept="image/*" required>
+      <img id="preview" alt="Предпросмотр">
+    </div>
+
+    <div class="form-group">
+      <label>Цвет</label>
+      <div class="color-row">
+        <div id="colorSwatch"></div>
+        <input type="text" id="colorInput" placeholder="Нажмите «Определить» или введите вручную">
+        <button type="button" id="detectBtn" class="btn" disabled>Определить</button>
+      </div>
+      <p class="hint">Алгоритм выдаёт примерный HEX-код. Металлик, грязь или блики могут искажать результат. Всегда проверяйте вручную.</p>
+    </div>
+
+    <div class="form-group">
+      <label>
+        <input type="checkbox" id="isVinyl"> Это винил / оклейка
+      </label>
+      <input type="text" id="vinylName" class="vinyl-field" placeholder="Например: 3M Satin Black, Avery SW900, Oracal 970">
+    </div>
+
+    <button type="submit" class="btn" style="width:100%">Сохранить в гараж</button>
+  </form>
+
+  <h3 style="margin-top:2rem">📦 Сохранённые авто</h3>
+  <div id="savedCars"></div>
+
+  <script>
+    const photoInput = document.getElementById('carPhoto');
+    const preview = document.getElementById('preview');
+    const detectBtn = document.getElementById('detectBtn');
+    const colorInput = document.getElementById('colorInput');
+    const colorSwatch = document.getElementById('colorSwatch');
+    const isVinyl = document.getElementById('isVinyl');
+    const vinylName = document.getElementById('vinylName');
+    const form = document.getElementById('carForm');
+    const savedCars = document.getElementById('savedCars');
+
+    let currentFile = null;
+
+    // 1. Загрузка фото и превью
+    photoInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      currentFile = file;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        preview.src = ev.target.result;
+        preview.style.display = 'block';
+        detectBtn.disabled = false;
+        colorInput.value = '';
+        colorSwatch.style.background = '#eee';
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // 2. Определение цвета через ColorThief
+    detectBtn.addEventListener('click', () => {
+      if (!currentFile) return;
+      const img = new Image();
+      img.onload = () => {
+        const colorThief = new ColorThief();
+        const rgb = colorThief.getColor(img);
+        const hex = `#${rgb.map(c => c.toString(16).padStart(2, '0')).join('')}`;
+        colorSwatch.style.background = hex;
+        colorInput.value = hex.toUpperCase();
+        detectBtn.textContent = '✓';
+        setTimeout(() => detectBtn.textContent = 'Определить', 1500);
+      };
+      img.src = URL.createObjectURL(currentFile);
+    });
+
+    // 3. Логика винила
+    isVinyl.addEventListener('change', () => {
+      vinylName.style.display = isVinyl.checked ? 'block' : 'none';
+      if (isVinyl.checked) {
+        detectBtn.disabled = true;
+        detectBtn.textContent = '—';
+        colorInput.placeholder = 'Введите название/код плёнки вручную';
+        colorInput.value = '';
+        colorSwatch.style.background = '#eee';
+      } else {
+        detectBtn.disabled = !currentFile;
+        detectBtn.textContent = 'Определить';
+        colorInput.placeholder = 'Нажмите «Определить» или введите вручную';
+      }
+    });
+
+    // 4. Сохранение (localStorage)
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const car = {
+        id: Date.now(),
+        color: colorInput.value.trim() || 'Не указан',
+        isVinyl: isVinyl.checked,
+        vinylName: vinylName.value.trim(),
+        photo: preview.src, // Base64
+        date: new Date().toLocaleDateString('ru-RU')
+      };
+
+      let cars = JSON.parse(localStorage.getItem('garageCars') || '[]');
+      cars.unshift(car);
+      try {
+        localStorage.setItem('garageCars', JSON.stringify(cars));
+        renderCars();
+        form.reset();
+        preview.style.display = 'none';
+        detectBtn.disabled = true;
+        colorSwatch.style.background = '#eee';
+      } catch (err) {
+        alert('⚠️ Хранилище переполнено. Удалите старые записи или уменьшите фото.');
+        console.error(err);
+      }
+    });
+
+    // Отрисовка списка
+    function renderCars() {
+      const cars = JSON.parse(localStorage.getItem('garageCars') || '[]');
+      savedCars.innerHTML = cars.map(c => `
+        <div class="car-card">
+          <strong>${c.date}</strong> &bull; ${c.isVinyl ? 'Винил' : 'Заводская краска'}<br>
+          Цвет: ${c.color} ${c.vinylName ? `(${c.vinylName})` : ''}
+          <br><img src="${c.photo}" alt="Авто">
+          <button class="del" onclick="deleteCar(${c.id})">Удалить</button>
+        </div>
+      `).join('');
+    }
+
+    window.deleteCar = (id) => {
+      let cars = JSON.parse(localStorage.getItem('garageCars') || '[]');
+      cars = cars.filter(c => c.id !== id);
+      localStorage.setItem('garageCars', JSON.stringify(cars));
+      renderCars();
+    };
+
+    renderCars();
+  </script>
+</body>
+</html>
