@@ -59,7 +59,7 @@
   <h3 style="margin-top:2rem">📦 Сохранённые авто</h3>
   <div id="savedCars"></div>
 
-  <script>
+    <script>
     const photoInput = document.getElementById('carPhoto');
     const preview = document.getElementById('preview');
     const detectBtn = document.getElementById('detectBtn');
@@ -84,22 +84,46 @@
         detectBtn.disabled = false;
         colorInput.value = '';
         colorSwatch.style.background = '#eee';
+        detectBtn.textContent = 'Определить';
       };
       reader.readAsDataURL(file);
     });
 
-    // 2. Определение цвета через ColorThief
+    // 2. УЛУЧШЕННОЕ определение цвета
     detectBtn.addEventListener('click', () => {
       if (!currentFile) return;
+      detectBtn.textContent = '⏳ Думаю...';
+      
       const img = new Image();
       img.onload = () => {
-        const colorThief = new ColorThief();
-        const rgb = colorThief.getColor(img);
-        const hex = `#${rgb.map(c => c.toString(16).padStart(2, '0')).join('')}`;
-        colorSwatch.style.background = hex;
-        colorInput.value = hex.toUpperCase();
-        detectBtn.textContent = '✓';
-        setTimeout(() => detectBtn.textContent = 'Определить', 1500);
+        try {
+          const colorThief = new ColorThief();
+          // Берём палитру из 5 доминирующих цветов (качество 5 для точности)
+          const palette = colorThief.getPalette(img, 5, 5);
+          
+          let bestColor = palette[0]; // По умолчанию берём первый
+
+          // Проходим по палитре и ищем цвет, который НЕ тёмный
+          for (let rgb of palette) {
+            // Вычисляем яркость (0 - черный, 255 - белый)
+            const brightness = (rgb[0] + rgb[1] + rgb[2]) / 3;
+            
+            // Если цвет ярче, чем тень/резина (порог 60), считаем его основным
+            if (brightness > 60) {
+              bestColor = rgb;
+              break;
+            }
+          }
+
+          const hex = `#${bestColor.map(c => c.toString(16).padStart(2, '0')).join('')}`;
+          colorSwatch.style.background = hex;
+          colorInput.value = hex.toUpperCase();
+          detectBtn.textContent = '✓ Готово';
+          setTimeout(() => detectBtn.textContent = 'Определить', 2000);
+        } catch (err) {
+          console.error(err);
+          detectBtn.textContent = 'Ошибка';
+        }
       };
       img.src = URL.createObjectURL(currentFile);
     });
@@ -120,7 +144,7 @@
       }
     });
 
-    // 4. Сохранение (localStorage)
+    // 4. Сохранение
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const car = {
@@ -128,7 +152,7 @@
         color: colorInput.value.trim() || 'Не указан',
         isVinyl: isVinyl.checked,
         vinylName: vinylName.value.trim(),
-        photo: preview.src, // Base64
+        photo: preview.src,
         date: new Date().toLocaleDateString('ru-RU')
       };
 
@@ -142,8 +166,7 @@
         detectBtn.disabled = true;
         colorSwatch.style.background = '#eee';
       } catch (err) {
-        alert('⚠️ Хранилище переполнено. Удалите старые записи или уменьшите фото.');
-        console.error(err);
+        alert('⚠️ Хранилище переполнено.');
       }
     });
 
@@ -152,8 +175,8 @@
       const cars = JSON.parse(localStorage.getItem('garageCars') || '[]');
       savedCars.innerHTML = cars.map(c => `
         <div class="car-card">
-          <strong>${c.date}</strong> &bull; ${c.isVinyl ? 'Винил' : 'Заводская краска'}<br>
-          Цвет: ${c.color} ${c.vinylName ? `(${c.vinylName})` : ''}
+          <strong>${c.date}</strong> &bull; ${c.isVinyl ? 'Винил' : 'Краска'}<br>
+          Цвет: <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${c.color.startsWith('#') ? c.color : '#ccc'};vertical-align:middle;margin-right:4px;"></span>${c.color} ${c.vinylName ? `(${c.vinylName})` : ''}
           <br><img src="${c.photo}" alt="Авто">
           <button class="del" onclick="deleteCar(${c.id})">Удалить</button>
         </div>
